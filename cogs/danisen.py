@@ -1,7 +1,7 @@
 import discord
 import discord.ext.commands
 import sqlite3
-import cogs.database
+from cogs.database import *
 class Danisen(discord.ext.commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
     players = ["player1", "player2"]
@@ -15,6 +15,8 @@ class Danisen(discord.ext.commands.Cog):
 
     #function assumes p1 win
     def score_update(self, p1,p2):
+        if p1[3] >= p2[3] + 2:
+            return
         if p1[3] >= p2[3]:
             p1[4] += 1
             if p2[3] != 1 or p2[4] != 0:
@@ -24,13 +26,13 @@ class Danisen(discord.ext.commands.Cog):
             if p2[3] != 1 or p2[4] != 0:
                 p2[4] -= 1
 
-        if p1[4] == 3:
+        if p1[4] >= 3:
             p1[3] += 1
-            p1[4] = 0
+            p1[4] = p1[4] % 3
         
-        if p2[4] == -3:
+        if p2[4] <= -3:
             p2[3] -= 1
-            p2[4] = 0
+            p2[4] = p2[4] % 3
 
     async def player_search(self, ctx: discord.AutocompleteContext):
         res = self.database_cur.execute(f"SELECT player_name FROM players")
@@ -62,6 +64,14 @@ class Danisen(discord.ext.commands.Cog):
             insert_new_player(tuple(line),self.database_cur)
         self.database_con.commit()
         await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danielsen!""")
+
+    @discord.commands.slash_command(description="unregister to the Danisen database!")
+    async def unregister(self, ctx : discord.ApplicationContext, 
+                    char1 : discord.Option(str, choices=characters)):
+        player_name = ctx.author.name
+        res = self.database_cur.execute(f"DELETE FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
+        self.database_con.commit()
+        await ctx.respond(f"""You have now unregistered {char1}""")
 
     #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
     @discord.commands.slash_command(description="Get your character rank")
