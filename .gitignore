@@ -3,3 +3,5 @@ danisen.db
 test_danisen.db
 __pycache__/database.cpython-312.pyc
 Players.xlsx
+cogs/__pycache__/danisen.cpython-312.pyc
+cogs/__pycache__/database.cpython-312.pyc
