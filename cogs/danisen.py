@@ -1,13 +1,13 @@
-import discord
+import discord, sqlite3, asyncio
 from discord.ext import commands, pages
-import sqlite3
 from cogs.database import *
-import asyncio
+from cogs.custom_views import *
 class Danisen(commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
     players = ["player1", "player2"]
     dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.yellow(), discord.Colour.orange(),
                    discord.Colour.dark_green(), discord.Colour.purple(), discord.Colour.blue(), discord.Colour.from_rgb(120,63,4)]
+    total_dans = 7
 
     def __init__(self, bot, database):
         self.bot = bot
@@ -16,32 +16,38 @@ class Danisen(commands.Cog):
         self.database_con.row_factory = sqlite3.Row
         self.database_cur = self.database_con.cursor()
         self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points,   PRIMARY KEY (discord_id, character) )")
-
+        self.dead_daniels = { dan:0 for dan in range(self.total_dans) }
+        self.daniel_queues = { dan:asyncio.Queue() for dan in range(self.total_dans) }
+        self.matchmaking_queue = asyncio.Queue()
+        self.max_active_matches = 3
+        self.cur_active_matches = 0
+        self.in_queue = {}
     #function assumes p1 win
     def score_update(self, p1,p2):
-        if p1[3] >= p2[3] + 2:
-            return
-        if p1[3] >= p2[3]:
-            p1[4] += 1
-            if p2[3] != 1 or p2[4] != 0:
-                p2[4] -= 1
+        rankdown = False
+        rankup = False
+        if p1[0] >= p2[0] + 2:
+            return 
+        if p1[0] >= p2[0]:
+            p1[1] += 1
+            if p2[0] != 1 or p2[1] != 0:
+                p2[1] -= 1
         else:
-            p1[4] += 2
-            if p2[3] != 1 or p2[4] != 0:
-                p2[4] -= 1
+            p1[1] += 2
+            if p2[0] != 1 or p2[1] != 0:
+                p2[1] -= 1
 
-        if p1[4] >= 3:
-            p1[3] += 1
-            p1[4] = p1[4] % 3
+        if p1[1] >= 3:
+            p1[0] += 1
+            p1[1] = p1[1] % 3
+            rankup = True
         
-        if p2[4] <= -3:
-            p2[3] -= 1
-            p2[4] = p2[4] % 3
-
-    async def player_search(self, ctx: discord.AutocompleteContext):
-        res = self.database_cur.execute(f"SELECT player_name FROM players")
-        name_list=res.fetchall()
-        return set([name[0] for name in name_list])
+        if p2[1] <= -3:
+            p2[0] -= 1
+            p2[1] = p2[1] % 3
+            rankdown = True
+        
+        return rankup, rankdown
 
     async def player_autocomplete(self, ctx: discord.AutocompleteContext):
         res = self.database_cur.execute(f"SELECT player_name FROM players")
@@ -49,7 +55,7 @@ class Danisen(commands.Cog):
         names = set([name[0] for name in name_list])
         return [name for name in names if (name.lower()).startswith(ctx.value.lower())]
 
-    @discord.commands.command(name="help", description="help msg")
+    @discord.commands.slash_command(description="help msg")
     async def help(self, ctx : discord.ApplicationContext):
         em = discord.Embed(
             title="Help",
@@ -146,44 +152,108 @@ class Danisen(commands.Cog):
         else:
             await ctx.respond(f"""{member.name} is not registered as {char} so you have no rank...""")
 
-    #report match score
-    @discord.commands.slash_command(description="Report a match score")
-    async def report_match(self, ctx : discord.ApplicationContext,
-                        player1 :  discord.Option(str, autocomplete=player_autocomplete),
-                        char1 : discord.Option(str, choices=characters),
-                        player2 :  discord.Option(str, autocomplete=player_autocomplete),
-                        char2 : discord.Option(str, choices=characters),
-                        winner : discord.Option(str, choices=players)):
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player1}' AND character='{char1}'")
-        p1 = res.fetchone()
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player2}' AND character='{char2}'")
-        p2 = res.fetchone()
+    #joins the matchmaking queue
+    @discord.commands.slash_command(description="queue up for danisen games")
+    async def join_queue(self, ctx : discord.ApplicationContext,
+                    char : discord.Option(str, choices=characters)):
+        await ctx.defer()
+        if ctx.author.id not in self.in_queue.keys():
+            print(f"added {ctx.author.name} to in_queue dict")
+            self.in_queue[ctx.author.id] = True
+        elif self.in_queue[ctx.author.id]:
+            await ctx.respond(f"You are already in the queue")
+            return
 
-        if not p1:
-            await ctx.respond(f"""No player named {player1} with character {char1}""")
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char}'")
+        daniel = res.fetchone()
+        if daniel == None:
+            await ctx.respond(f"You are not registered with that character")
             return
-        if not p2:
-            await ctx.respond(f"""No player named {player2} with character {char2}""")
-            return
-        p1 = list(p1)
-        p2 = list(p2)
+        dan = daniel['dan']
+        await self.daniel_queues[dan].put(daniel)
+        await self.matchmaking_queue.put(daniel)
+        await ctx.respond(f"You've been added to the matchmaking queue with {char}")
+
+        #matchmake
+        if (self.cur_active_matches != self.max_active_matches and
+            self.matchmaking_queue.qsize() >= 2):
+            print("matchmake function called")
+            await self.matchmake(ctx.interaction)
+
+    async def matchmake(self, ctx : discord.Interaction):
+        while (self.cur_active_matches != self.max_active_matches and
+                self.matchmaking_queue.qsize() >= 2):
+            daniel1 = await self.matchmaking_queue.get()
+            self.in_queue[ctx.user.id] = False
+
+            if self.dead_daniels[daniel1['dan']] != 0:
+                self.dead_daniels[daniel1['dan']] -= 1
+                continue
+
+            same_daniel = await self.daniel_queues[daniel1['dan']].get()
+            #sanity check that this is also the latest daniel in the respective dan queue
+            if daniel1 != same_daniel:
+                print(f"Somethings gone very wrong... daniel queues are not synchronized {daniel1=} {same_daniel=}")
+                return
+            
+            #iterate through daniel queues to find suitable opponent
+            #will search through queues for an opponent closest in dan prioritizing higher dan
+            #x, x+1, x-1, x+2, x-2 etc.
+            #e.g. for a dan 3 player we will search the queues as follows
+            #3, 4, 2, 5, 1, 6, 7
+            #(defaults to ascending order or descending order once out of dans lower or higher resp.)
+
+            #creating daniel iterator (the search pattern defined above)
+            check_dan = [daniel1['dan']]
+            for dan_offset in range(1, max(self.total_dans-check_dan[0], check_dan[0]-1)):
+                cur_dan = check_dan[0] + dan_offset
+                if  1 <= cur_dan <= 7:
+                    check_dan.append(cur_dan)
+                cur_dan = check_dan[0] - dan_offset
+                if  1 <= cur_dan <= 7:
+                    check_dan.append(cur_dan)
+            
+            print(f"dan queues to check {check_dan}")
+            for dan in check_dan:
+                if not self.daniel_queues[dan].empty():
+                    daniel2 = await self.daniel_queues[dan].get()
+                    self.in_queue[daniel2['discord_id']] = False
+
+                    #this is so we clean up the main queue later for players that have already been matched
+                    self.dead_daniels[daniel2['dan']] += 1
+                    print(f"match made between {daniel1['player_name']} and {daniel2['player_name']}")
+                    await self.create_match_interaction(ctx, daniel1, daniel2)
+                    break
+
+    async def create_match_interaction(self, ctx : discord.Interaction,
+                                       daniel1, daniel2):
+        self.cur_active_matches += 1
+        view = MatchView(self, daniel1, daniel2)
+        id1 = f'<@{daniel1['discord_id']}>'
+        id2 = f'<@{daniel2['discord_id']}>'
+        await ctx.respond(id1 +" vs " +id2 +"\n Note only players in the match can report it!",view=view)
+
+    #report match score
+    async def report_match(self, interaction: discord.Interaction, player1, player2, winner):
+        p1 = [player1['dan'], player1['points']]
+        p2 = [player2['dan'], player2['points']]
         if (winner == "player1") :
             self.score_update(p1,p2)
-            winner = player1
-            loser = player2
+            winner = player1['player_name']
+            loser = player2['player_name']
         else:
             self.score_update(p2,p1)
-            winner = player2
-            loser = player1
-        res = self.database_cur.execute(f"UPDATE players SET dan = {p1[3]}, points = {p1[4]} WHERE player_name='{player1}' AND character='{char1}'")
-        res = self.database_cur.execute(f"UPDATE players SET dan = {p2[3]}, points = {p2[4]} WHERE player_name='{player2}' AND character='{char2}'")
+            winner = player2['player_name']
+            loser = player1['player_name']
+        res = self.database_cur.execute(f"UPDATE players SET dan = {p1[0]}, points = {p1[1]} WHERE player_name='{player1['player_name']}' AND character='{player1['character']}'")
+        res = self.database_cur.execute(f"UPDATE players SET dan = {p2[0]}, points = {p2[1]} WHERE player_name='{player2['player_name']}' AND character='{player2['character']}'")
         self.database_con.commit()
-        await ctx.respond(f"Match has been reported as {winner}'s victory over {loser}\n{player1}'s {char1} rank is now {p1[3]} dan {p1[4]} points\n{player2}'s {char2} rank is now {p2[3]} dan {p2[4]} points")
+        await interaction.respond(f"Match has been reported as {winner}'s victory over {loser}\n{player1['player_name']}'s {player1['character']} rank is now {p1[0]} dan {p1[1]} points\n{player2['player_name']}'s {player2['character']} rank is now {p2[0]} dan {p2[1]} points")
 
 
     @discord.commands.slash_command(description="See players in a specific dan")
     async def dan(self, ctx : discord.ApplicationContext,
-                  dan : discord.Option(int, min_value=1, max_value=7)):
+                  dan : discord.Option(int, min_value=1, max_value=total_dans)):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE dan={dan}")
         daniels = res.fetchall()
         page_list = []
@@ -199,3 +269,11 @@ class Danisen(commands.Cog):
                 page_size = 0
         paginator = pages.Paginator(pages=page_list)
         await paginator.respond(ctx.interaction, ephemeral=False)
+    
+    @discord.commands.slash_command(description="UPDATE MAX MATCHES FOR Q")
+    @discord.commands.default_permissions(manage_messages=True)
+    async def update_max_matches(self, ctx : discord.ApplicationContext,
+                                 max : discord.Option(int, min_value=1)):
+        self.max_active_matches = max
+        await ctx.respond(f"Max matches updated to {max}")
+
