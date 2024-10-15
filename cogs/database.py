@@ -3,6 +3,12 @@ import pandas
 import math
 df = pandas.read_excel('Players.xlsx')
 
+class DanisenRow(sqlite3.Row):
+    def __repr__(self):
+        return self.__getitem__('player_name')
+    def __str__(self):
+        return self.__getitem__('player_name')
+
 def insert_new_player(player_tuple, db):
     res = True
     try:

@@ -33,17 +33,17 @@ class MatchSelect(discord.ui.Select):
         self.disabled=True
         self.view.disable_all_items()
         self.view.stop()
-        print("Menu Disabled")
-        print(self.disabled)
+        print("Match has been reported")
         self.bot.cur_active_matches -= 1
-        if self.values[0] == "Cancelled":
+        print(f"cur_active_matches reduced {self.bot.cur_active_matches}")
+        if self.values[0] == "Cancel":
             await interaction.response.send_message(f"Match has been cancelled, please queue up again if you wish to play")
         elif self.values[0] == f"{self.p1["player_name"]} {self.p1["character"]}":
-            await self.bot.report_match(interaction, self.p1,self.p2, "player1")
+            await self.bot.report_match_queue(interaction, self.p1,self.p2, "player1")
         else:
-            await self.bot.report_match(interaction, self.p1,self.p2, "player2")
-        
+            await self.bot.report_match_queue(interaction, self.p1,self.p2, "player2")
         await self.bot.matchmake(interaction)
+        await interaction.message.delete()
 
 class MatchView(discord.ui.View):
     def __init__(self, bot, p1, p2):
