@@ -28,6 +28,7 @@ class MatchSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         valid_ids = [self.p1['discord_id'], self.p2['discord_id']]
 
         if interaction.user.id not in valid_ids and not interaction.user.guild_permissions.administrator:
@@ -67,6 +68,7 @@ class MatchView(discord.ui.View):
     
     @discord.ui.button(label="Update Stream", style=discord.ButtonStyle.primary)
     async def button_callback(self, button, interaction):
+        await interaction.response.defer()
         if not interaction.user.guild_permissions.administrator:
             return
 
