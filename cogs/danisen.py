@@ -297,6 +297,11 @@ class Danisen(commands.Cog):
             await self.matchmake(ctx.interaction)
 
     def rejoin_queue(self, player):
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player["discord_id"]} AND character='{player["character"]}'")
+        player = res.fetchone()
+        player = DanisenRow(player)
+        player['requeue'] = True
+
         self.in_queue[player['player_name']][0] = True
         self.dans_in_queue[player['dan']].append(player)
         self.matchmaking_queue.append(player)

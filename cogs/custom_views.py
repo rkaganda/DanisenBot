@@ -39,11 +39,13 @@ class MatchSelect(discord.ui.Select):
         self.bot.cur_active_matches -= 1
         print(f"cur_active_matches reduced {self.bot.cur_active_matches}")
         if self.values[0] == "Cancel":
-            await interaction.response.send_message(f"Match has been cancelled, you will return to queue if you set it")
+            await interaction.respond(f"Match has been cancelled you will be not readded to queue")
+            await interaction.message.delete()
+            return
         elif self.values[0] == f"{self.p1["player_name"]} {self.p1["character"]}":
-            await self.bot.report_match_queue(interaction, self.p1,self.p2, "player1")
+            await self.bot.report_match_queue(interaction, self.p1, self.p2, "player1")
         else:
-            await self.bot.report_match_queue(interaction, self.p1,self.p2, "player2")
+            await self.bot.report_match_queue(interaction, self.p1, self.p2, "player2")
         
         if self.p1['requeue']:
             self.bot.rejoin_queue(self.p1)
@@ -80,4 +82,4 @@ class MatchView(discord.ui.View):
             f.truncate(0)
             json.dump(overlay,f)
 
-        await interaction.response.send_message("Stream Updated") 
+        await interaction.respond("Stream Updated") 
