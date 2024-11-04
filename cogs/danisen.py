@@ -2,19 +2,21 @@ import discord, sqlite3, asyncio
 from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
-from collections import Counter
+from obswebsocket import obsws, requests 
 class Danisen(commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
     players = ["player1", "player2"]
     dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.yellow(), discord.Colour.orange(),
                    discord.Colour.dark_green(), discord.Colour.purple(), discord.Colour.blue(), discord.Colour.from_rgb(120,63,4)]
     total_dans = 7
+    ACTIVE_MATCHES_CHANNEL_ID = 1295577883879931937
+    queue_status = True
 
     def __init__(self, bot, database):
         self.bot = bot
         self._last_member = None
         self.database_con = database
-        self.database_con.row_factory = DanisenRow
+        self.database_con.row_factory = sqlite3.Row
         self.database_cur = self.database_con.cursor()
         self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points,   PRIMARY KEY (discord_id, character) )")
 
@@ -25,6 +27,22 @@ class Danisen(commands.Cog):
 
         #dict with following format player_name:[in_queue, last_played_player_name]
         self.in_queue = {}
+
+    @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
+    @discord.commands.default_permissions(manage_roles=True)
+    async def set_queue(self, ctx : discord.ApplicationContext,
+                        queue_status : discord.Option(bool)):
+        self.queue_status = queue_status
+        if queue_status == False:
+            self.matchmaking_queue = []
+            self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
+            self.max_active_matches = 3
+            self.cur_active_matches = 0
+            self.in_queue = {}
+            await ctx.respond(f"The matchmaking queue has been disabled")
+        else:
+            await ctx.respond(f"The matchmaking queue has been enabled")
+
 
     def dead_role(self,ctx, player):
         role = None
@@ -97,6 +115,7 @@ class Danisen(commands.Cog):
         return [name for name in names if (name.lower()).startswith(ctx.value.lower())]
 
     @discord.commands.slash_command(description="set a players rank (admin debug cmd)")
+    @discord.commands.default_permissions(manage_roles=True)
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
                         char : discord.Option(str, choices=characters),
@@ -232,8 +251,26 @@ class Danisen(commands.Cog):
     #joins the matchmaking queue
     @discord.commands.slash_command(description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
-                    char : discord.Option(str, choices=characters)):
+                    char : discord.Option(str, choices=characters),
+                    rejoin_queue : discord.Option(bool)):
         await ctx.defer()
+
+        #check if q open
+        if self.queue_status == False:
+            await ctx.respond(f"The matchmaking queue is currently closed")
+            return
+
+        #Check if valid character
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char}'")
+        daniel = res.fetchone()
+        if daniel == None:
+            await ctx.respond(f"You are not registered with that character")
+            return
+
+        daniel = DanisenRow(daniel)
+        daniel['requeue'] = rejoin_queue
+
+        #Check if in Queue already
         print(f"join_queue called for {ctx.author.name}")
         if ctx.author.name not in self.in_queue.keys():
             print(f"added {ctx.author.name} to in_queue dict")
@@ -244,11 +281,6 @@ class Danisen(commands.Cog):
             return
         self.in_queue[ctx.author.name][0] = True
 
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char}'")
-        daniel = res.fetchone()
-        if daniel == None:
-            await ctx.respond(f"You are not registered with that character")
-            return
 
         self.dans_in_queue[daniel['dan']].append(daniel)
         self.matchmaking_queue.append(daniel)
@@ -264,6 +296,13 @@ class Danisen(commands.Cog):
             print("matchmake function called")
             await self.matchmake(ctx.interaction)
 
+    def rejoin_queue(self, player):
+        self.in_queue[player['player_name']][0] = True
+        self.dans_in_queue[player['dan']].append(player)
+        self.matchmaking_queue.append(player)
+        print(f"{player['player_name']} has rejoined the queue")
+
+        
     async def matchmake(self, ctx : discord.Interaction):
         while (self.cur_active_matches != self.max_active_matches and
                 len(self.matchmaking_queue) >= 2):
@@ -347,7 +386,9 @@ class Danisen(commands.Cog):
         view = MatchView(self, daniel1, daniel2)
         id1 = f'<@{daniel1['discord_id']}>'
         id2 = f'<@{daniel2['discord_id']}>'
-        webhook_msg = await ctx.respond(id1 +" vs " +id2 +"\n Note only players in the match can report it!",view=view)
+        channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
+        webhook_msg = await channel.send(id1 +" "+ daniel1['character'] + " vs " + id2 + " " + daniel2['character'] +
+                                         "\n Note only players in the match can report it! (and admins)", view=view)
 
         await webhook_msg.pin()
 
@@ -415,11 +456,30 @@ class Danisen(commands.Cog):
                 page_size = 0
         paginator = pages.Paginator(pages=page_list)
         await paginator.respond(ctx.interaction, ephemeral=False)
-    
+
+    @discord.commands.slash_command(description="See the top players")
+    async def leaderboard(self, ctx : discord.ApplicationContext):
+        res = self.database_cur.execute(f"SELECT * FROM players ORDER BY dan DESC, points DESC")
+        daniels = res.fetchall()
+        page_list = []
+        page_num = 1
+        em = discord.Embed(title=f"Top Daniels {page_num}")
+        page_list.append(em)
+        page_size = 0
+        for daniel in daniels:
+            page_size += 1
+            page_list[-1].add_field(name=f"{daniel['player_name']} {daniel['character']}", value=f"Dan : {daniel['dan']} Points: {daniel['points']}")
+            if page_size == 10:
+                page_num += 1
+                em = discord.Embed(title=f"Top Daniels {page_num}")
+                page_list.append(em)
+                page_size = 0
+        paginator = pages.Paginator(pages=page_list)
+        await paginator.respond(ctx.interaction, ephemeral=False)
+
     @discord.commands.slash_command(description="Update max matches for the queue system (Admin Cmd)")
     @discord.commands.default_permissions(manage_messages=True)
     async def update_max_matches(self, ctx : discord.ApplicationContext,
                                  max : discord.Option(int, min_value=1)):
         self.max_active_matches = max
         await ctx.respond(f"Max matches updated to {max}")
-

@@ -3,7 +3,7 @@ import pandas
 import math
 df = pandas.read_excel('Players.xlsx')
 
-class DanisenRow(sqlite3.Row):
+class DanisenRow(dict):
     def __repr__(self):
         return self.__getitem__('player_name')
     def __str__(self):
