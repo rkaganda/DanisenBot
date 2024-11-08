@@ -4,7 +4,42 @@ from cogs.database import *
 from cogs.custom_views import *
 from obswebsocket import obsws, requests 
 class Danisen(commands.Cog):
-    characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
+    characters = [
+        "Zeta",
+        "Vaseraga",
+        "Beatrix",
+        "Eustace",
+        "Anre",
+        "Seox",
+        "Lancelot",
+        "Vane",
+        "Percival",
+        "Siegfried",
+        "Versusia",
+        "Zooey",
+        "Ladiva",
+        "Narmaya",
+        "Gran",
+        "Djeeta",
+        "Charlotta",
+        "Ferry",
+        "Anila",
+        "Vikala",
+        "Grimnir",
+        "Metera",
+        "Lowain",
+        "Katalina",
+        "Vira",
+        "Yuel",
+        "Soriz",
+        "Cagliostro",
+        "Nier",
+        "Belial",
+        "Beelzbub",
+        "Lucilius",
+        "Avatar Belial",
+        "2B"
+    ]
     players = ["player1", "player2"]
     dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.yellow(), discord.Colour.orange(),
                    discord.Colour.dark_green(), discord.Colour.purple(), discord.Colour.blue(), discord.Colour.from_rgb(120,63,4)]
@@ -473,7 +508,7 @@ class Danisen(commands.Cog):
         daniels = res.fetchall()
         page_list = []
         page_num = 1
-        em = discord.Embed(title=f"Top Daniels {page_num}")
+        em = discord.Embed(title=f"Leaderboard {page_num}")
         page_list.append(em)
         page_size = 0
         for daniel in daniels:
@@ -481,7 +516,7 @@ class Danisen(commands.Cog):
             page_list[-1].add_field(name=f"{daniel['player_name']} {daniel['character']}", value=f"Dan : {daniel['dan']} Points: {daniel['points']}")
             if page_size == 10:
                 page_num += 1
-                em = discord.Embed(title=f"Top Daniels {page_num}")
+                em = discord.Embed(title=f"Leaderboard {page_num}")
                 page_list.append(em)
                 page_size = 0
         paginator = pages.Paginator(pages=page_list)
