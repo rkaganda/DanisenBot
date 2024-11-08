@@ -9,10 +9,10 @@ class Danisen(commands.Cog):
     dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.yellow(), discord.Colour.orange(),
                    discord.Colour.dark_green(), discord.Colour.purple(), discord.Colour.blue(), discord.Colour.from_rgb(120,63,4)]
     total_dans = 7
-    ACTIVE_MATCHES_CHANNEL_ID = 1295577883879931937
+    # ACTIVE_MATCHES_CHANNEL_ID = 1295577883879931937
     queue_status = True
 
-    def __init__(self, bot, database):
+    def __init__(self, bot, database, config):
         self.bot = bot
         self._last_member = None
         self.database_con = database
@@ -27,6 +27,11 @@ class Danisen(commands.Cog):
 
         #dict with following format player_name:[in_queue, last_played_player_name]
         self.in_queue = {}
+
+        # access config
+        channel_dict = dict(config.items('CHANNELS'))
+        self.active_matches_channel_id = int(channel_dict['active_matches_channel_id'])
+        print(f"channel_id={self.active_matches_channel_id}")
 
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
@@ -51,7 +56,7 @@ class Danisen(commands.Cog):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
         remaining_daniel = res.fetchone()
         if not remaining_daniel:
-            print(f'Dan role {player['dan']} will be removed')
+            print(f"Dan role {player['dan']} will be removed")
             role = (discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}"))
             return role
 
@@ -297,7 +302,7 @@ class Danisen(commands.Cog):
             await self.matchmake(ctx.interaction)
 
     def rejoin_queue(self, player):
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player["discord_id"]} AND character='{player["character"]}'")
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND character='{player['character']}'")
         player = res.fetchone()
         player = DanisenRow(player)
         player['requeue'] = True
@@ -389,9 +394,9 @@ class Danisen(commands.Cog):
                                        daniel1, daniel2):
         self.cur_active_matches += 1
         view = MatchView(self, daniel1, daniel2)
-        id1 = f'<@{daniel1['discord_id']}>'
-        id2 = f'<@{daniel2['discord_id']}>'
-        channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
+        id1 = f"<@{daniel1['discord_id']}>"
+        id2 = f"<@{daniel2['discord_id']}>"
+        channel = self.bot.get_channel(self.active_matches_channel_id)
         webhook_msg = await channel.send(id1 +" "+ daniel1['character'] + " vs " + id2 + " " + daniel2['character'] +
                                          "\n Note only players in the match can report it! (and admins)", view=view)
 

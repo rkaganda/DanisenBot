@@ -17,7 +17,7 @@ intents.members = True
 bot = discord.Bot(intents=intents)
 con = sqlite3.connect("danisen.db")
 
-bot.add_cog(Danisen(bot,con))
+bot.add_cog(Danisen(bot,con,config))
 
 @bot.event
 async def on_ready():

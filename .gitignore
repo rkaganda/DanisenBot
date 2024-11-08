@@ -8,3 +8,5 @@ cogs/__pycache__/database.cpython-312.pyc
 .vscode/settings.json
 cogs/__pycache__/custom_views.cpython-312.pyc
 logs
+bot.cfg_TEST
+cogs/__pycache__/
