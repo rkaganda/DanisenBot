@@ -158,7 +158,7 @@ class Danisen(commands.Cog):
     @discord.commands.default_permissions(manage_roles=True)
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char : discord.Option(str, choices=characters),
+                        char : discord.Option(str, autocomplete=characters),
                         dan :  discord.Option(int),
                         points : discord.Option(int)):
 
@@ -185,9 +185,9 @@ class Danisen(commands.Cog):
     #registers player+char to db
     @discord.commands.slash_command(description="Register to the Danisen database!")
     async def register(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, choices=characters),
-                    char2 : discord.Option(str, choices=characters, required=False),
-                    char3 : discord.Option(str, choices=characters, required=False)):
+                    char1 : discord.Option(str, autocomplete=characters),
+                    char2 : discord.Option(str, autocomplete=characters, required=False),
+                    char3 : discord.Option(str, autocomplete=characters, required=False)):
         char3 = char3 or ""
         char2 = char2 or ""
         player_name = ctx.author.name
@@ -210,11 +210,11 @@ class Danisen(commands.Cog):
         role_list.append(discord.utils.get(ctx.guild.roles, name="Dan 1"))
         await ctx.author.add_roles(*role_list)
 
-        await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danielsen!""")
+        await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danisen!""")
 
     @discord.commands.slash_command(description="unregister to the Danisen database!")
     async def unregister(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, choices=characters)):
+                    char1 : discord.Option(str, autocomplete=characters)):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
         daniel = res.fetchone()
 
@@ -242,7 +242,7 @@ class Danisen(commands.Cog):
     #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
     @discord.commands.slash_command(description="Get your character rank/Put in a players name to get their character rank!")
     async def rank(self, ctx : discord.ApplicationContext,
-                char : discord.Option(str, choices=characters),
+                char : discord.Option(str, autocomplete=characters),
                 discord_name :  discord.Option(str, autocomplete=player_autocomplete)):
         members = ctx.guild.members
         member = None
@@ -291,7 +291,7 @@ class Danisen(commands.Cog):
     #joins the matchmaking queue
     @discord.commands.slash_command(description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
-                    char : discord.Option(str, choices=characters),
+                    char : discord.Option(str, autocomplete=characters),
                     rejoin_queue : discord.Option(bool)):
         await ctx.defer()
 
@@ -442,9 +442,9 @@ class Danisen(commands.Cog):
     @discord.commands.default_permissions(send_polls=True)
     async def report_match(self, ctx : discord.ApplicationContext,
                         player1_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char1 : discord.Option(str, choices=characters),
+                        char1 : discord.Option(str, autocomplete=characters),
                         player2_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char2 : discord.Option(str, choices=characters),
+                        char2 : discord.Option(str, autocomplete=characters),
                         winner : discord.Option(str, choices=players)):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player1_name}' AND character='{char1}'")
         player1 = res.fetchone()
