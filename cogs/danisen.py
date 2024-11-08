@@ -67,7 +67,7 @@ class Danisen(commands.Cog):
         channel_dict = dict(config.items('CHANNELS'))
         self.active_matches_channel_id = int(channel_dict['active_matches_channel_id'])
         print(f"channel_id={self.active_matches_channel_id}")
-
+        
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
     async def set_queue(self, ctx : discord.ApplicationContext,
@@ -103,7 +103,7 @@ class Danisen(commands.Cog):
         rankup = False
         if winner_rank[0] >= loser_rank[0] + 2:
             return winner_rank, loser_rank
-        if winner_rank[0] >= loser_rank[0]:
+        if winner_rank[0] >= loserrank[0]:
             winner_rank[1] += 1
             if loser_rank[0] != 1 or loser_rank[1] != 0:
                 loser_rank[1] -= 1
@@ -153,12 +153,15 @@ class Danisen(commands.Cog):
         name_list=res.fetchall()
         names = set([name[0] for name in name_list])
         return [name for name in names if (name.lower()).startswith(ctx.value.lower())]
+    
+    async def character_autocomplete(self, ctx: discord.AutocompleteContext):
+        return self.characters
 
     @discord.commands.slash_command(description="set a players rank (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char : discord.Option(str, autocomplete=characters),
+                        char : discord.Option(str, autocomplete=character_autocomplete),
                         dan :  discord.Option(int),
                         points : discord.Option(int)):
 
@@ -185,9 +188,9 @@ class Danisen(commands.Cog):
     #registers player+char to db
     @discord.commands.slash_command(description="Register to the Danisen database!")
     async def register(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, autocomplete=characters),
-                    char2 : discord.Option(str, autocomplete=characters, required=False),
-                    char3 : discord.Option(str, autocomplete=characters, required=False)):
+                    char1 : discord.Option(str, autocomplete=character_autocomplete),
+                    char2 : discord.Option(str, autocomplete=character_autocomplete, required=False),
+                    char3 : discord.Option(str, autocomplete=character_autocomplete, required=False)):
         char3 = char3 or ""
         char2 = char2 or ""
         player_name = ctx.author.name
@@ -528,3 +531,4 @@ class Danisen(commands.Cog):
                                  max : discord.Option(int, min_value=1)):
         self.max_active_matches = max
         await ctx.respond(f"Max matches updated to {max}")
+
