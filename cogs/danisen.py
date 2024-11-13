@@ -72,7 +72,7 @@ class Danisen(commands.Cog):
         rankup = False
         if winner_rank[0] >= loser_rank[0] + 2:
             return winner_rank, loser_rank
-        if winner_rank[0] >= loserrank[0]:
+        if winner_rank[0] >= loser_rank[0]:
             winner_rank[1] += 1
             if loser_rank[0] != 1 or loser_rank[1] != 0:
                 loser_rank[1] -= 1
@@ -182,6 +182,7 @@ class Danisen(commands.Cog):
 
         print(f"Adding Character and Dan roles to user")
         role_list.append(discord.utils.get(ctx.guild.roles, name="Dan 1"))
+        print(f"role_list={role_list}")
         await ctx.author.add_roles(*role_list)
 
         await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danisen!""")
