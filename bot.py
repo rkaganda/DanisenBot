@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 import configparser
 import sqlite3
 from functools import cache
@@ -22,5 +23,15 @@ bot.add_cog(Danisen(bot,con,config))
 @bot.event
 async def on_ready():
     print(f'We have logged in as {bot.user}')
+
+async def sync_commands():
+    try:
+        await bot.wait_until_ready()
+        # await bot.tree.sync()
+        print("Commands synced successfully")
+    except Exception as e:
+        print(f"Error syncing commands: {e}")
+
+bot.loop.create_task(sync_commands())
 
 bot.run(token)

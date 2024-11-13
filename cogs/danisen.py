@@ -4,42 +4,7 @@ from cogs.database import *
 from cogs.custom_views import *
 from obswebsocket import obsws, requests 
 class Danisen(commands.Cog):
-    characters = [
-        "Zeta",
-        "Vaseraga",
-        "Beatrix",
-        "Eustace",
-        "Anre",
-        "Seox",
-        "Lancelot",
-        "Vane",
-        "Percival",
-        "Siegfried",
-        "Versusia",
-        "Zooey",
-        "Ladiva",
-        "Narmaya",
-        "Gran",
-        "Djeeta",
-        "Charlotta",
-        "Ferry",
-        "Anila",
-        "Vikala",
-        "Grimnir",
-        "Metera",
-        "Lowain",
-        "Katalina",
-        "Vira",
-        "Yuel",
-        "Soriz",
-        "Cagliostro",
-        "Nier",
-        "Belial",
-        "Beelzbub",
-        "Lucilius",
-        "Avatar Belial",
-        "2B"
-    ]
+    characters = []
     players = ["player1", "player2"]
     dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.yellow(), discord.Colour.orange(),
                    discord.Colour.dark_green(), discord.Colour.purple(), discord.Colour.blue(), discord.Colour.from_rgb(120,63,4)]
@@ -54,7 +19,11 @@ class Danisen(commands.Cog):
         self.database_con.row_factory = sqlite3.Row
         self.database_cur = self.database_con.cursor()
         self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points,   PRIMARY KEY (discord_id, character) )")
-
+        
+        # characters config
+        characters_str = config.get('GAME', 'characters')
+        self.characters = [char.strip() for char in characters_str.split(',')]
+        print(f"characters={self.characters}")
         self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
         self.matchmaking_queue = []
         self.max_active_matches = 3
@@ -67,7 +36,7 @@ class Danisen(commands.Cog):
         channel_dict = dict(config.items('CHANNELS'))
         self.active_matches_channel_id = int(channel_dict['active_matches_channel_id'])
         print(f"channel_id={self.active_matches_channel_id}")
-
+        
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
     async def set_queue(self, ctx : discord.ApplicationContext,
@@ -149,16 +118,21 @@ class Danisen(commands.Cog):
         return winner_rank, loser_rank
 
     async def player_autocomplete(self, ctx: discord.AutocompleteContext):
-        res = self.database_cur.execute(f"SELECT player_name FROM players")
-        name_list=res.fetchall()
-        names = set([name[0] for name in name_list])
-        return [name for name in names if (name.lower()).startswith(ctx.value.lower())]
+        res = self.database_cur.execute("SELECT player_name FROM players")
+        name_list = res.fetchall()
+        names = set(name[0] for name in name_list)
+        filtered_names = [name for name in names if name.lower().startswith(ctx.value.lower())]
+        return filtered_names[:25]
+
+    async def character_autocomplete(self, ctx: discord.AutocompleteContext):
+        filtered_characters = [character for character in self.characters if character.lower().startswith(ctx.value.lower())]
+        return filtered_characters[:25]
 
     @discord.commands.slash_command(description="set a players rank (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char : discord.Option(str, choices=characters),
+                        char : discord.Option(str, autocomplete=character_autocomplete),
                         dan :  discord.Option(int),
                         points : discord.Option(int)):
 
@@ -185,9 +159,9 @@ class Danisen(commands.Cog):
     #registers player+char to db
     @discord.commands.slash_command(description="Register to the Danisen database!")
     async def register(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, choices=characters),
-                    char2 : discord.Option(str, choices=characters, required=False),
-                    char3 : discord.Option(str, choices=characters, required=False)):
+                    char1 : discord.Option(str, autocomplete=character_autocomplete),
+                    char2 : discord.Option(str, autocomplete=character_autocomplete, required=False),
+                    char3 : discord.Option(str, autocomplete=character_autocomplete, required=False)):
         char3 = char3 or ""
         char2 = char2 or ""
         player_name = ctx.author.name
@@ -208,13 +182,14 @@ class Danisen(commands.Cog):
 
         print(f"Adding Character and Dan roles to user")
         role_list.append(discord.utils.get(ctx.guild.roles, name="Dan 1"))
+        print(f"role_list={role_list}")
         await ctx.author.add_roles(*role_list)
 
-        await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danielsen!""")
+        await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danisen!""")
 
     @discord.commands.slash_command(description="unregister to the Danisen database!")
     async def unregister(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, choices=characters)):
+                    char1 : discord.Option(str, autocomplete=character_autocomplete)):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
         daniel = res.fetchone()
 
@@ -242,7 +217,7 @@ class Danisen(commands.Cog):
     #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
     @discord.commands.slash_command(description="Get your character rank/Put in a players name to get their character rank!")
     async def rank(self, ctx : discord.ApplicationContext,
-                char : discord.Option(str, choices=characters),
+                char : discord.Option(str, autocomplete=character_autocomplete),
                 discord_name :  discord.Option(str, autocomplete=player_autocomplete)):
         members = ctx.guild.members
         member = None
@@ -291,7 +266,7 @@ class Danisen(commands.Cog):
     #joins the matchmaking queue
     @discord.commands.slash_command(description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
-                    char : discord.Option(str, choices=characters),
+                    char : discord.Option(str, autocomplete=character_autocomplete),
                     rejoin_queue : discord.Option(bool)):
         await ctx.defer()
 
@@ -442,9 +417,9 @@ class Danisen(commands.Cog):
     @discord.commands.default_permissions(send_polls=True)
     async def report_match(self, ctx : discord.ApplicationContext,
                         player1_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char1 : discord.Option(str, choices=characters),
+                        char1 : discord.Option(str, autocomplete=character_autocomplete),
                         player2_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char2 : discord.Option(str, choices=characters),
+                        char2 : discord.Option(str, autocomplete=character_autocomplete),
                         winner : discord.Option(str, choices=players)):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player1_name}' AND character='{char1}'")
         player1 = res.fetchone()
@@ -528,3 +503,4 @@ class Danisen(commands.Cog):
                                  max : discord.Option(int, min_value=1)):
         self.max_active_matches = max
         await ctx.respond(f"Max matches updated to {max}")
+
